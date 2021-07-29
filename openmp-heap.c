@@ -8,8 +8,17 @@
 const int R = 3;
 int n_threads;
 
-float* single_layer(float *x, int N, float (*W)[R], float b, float *y) {	
-	int i,j;
+float* single_layer(float *x, int N, float (*W)[R], float b) {
+	
+	float *y = malloc(N-R+1);
+	#pragma omp parallel for
+	for(int i=0; i<N-R+1; i++) {
+		y[i] = 0.0;
+	}
+	
+	#pragma omp barrier
+	
+	int i, j;
 	#pragma omp parallel for collapse(2) num_threads(n_threads)
 	for (i=0; i<N-R+1; i++) {
 		for (j=0; j<R; j++) {
@@ -61,13 +70,13 @@ int main(int argc, char *argv[]) {
 	
 	// initialize the values of the first layer to 1
 	float x[N];
-	for (int i=0; i < N; i++){
+	for (int i=0; i < N; i++) {
 		x[i] = 1.0;
 	}
 	
 	// create a activation
-	float activation[N];
-	memcpy(activation, x, N*sizeof(float));
+	float* activation[K];
+	activation[0] = x;
 	
 	// start recording time
 	float t_start = omp_get_wtime();
@@ -89,28 +98,37 @@ int main(int argc, char *argv[]) {
 			}
 		}
 				
-		// do the calculation
-		float y[layer_len];
-		#pragma omp parallel for
-		for(int i=0; i<layer_len; i++){
-			y[i] = 0.0;
-		}
-		single_layer(activation, layer_len+R-1, W, b, y);
+		/*//TEST 
+		printf("activation of source layer\n");
+		for(int i=0; i<layer_len+R-1; i++) {
+			printf("%f ", activation[t-1][i]);
+		}*/
 		
-		// save the activation result
-		memcpy(activation, y, layer_len * sizeof(float));
+		// do the calculation
+		activation[t] = single_layer(activation[t-1], layer_len+R-1, W, b);
+		
+		/*/TEST
+		printf("\nactivation of target layer\n");
+		for(int i=0; i<layer_len; i++) {
+			printf("%f ", activation[t][i]);
+		}*/
 	}
 	
 	float t_end = omp_get_wtime();
 	
 	// print final result
 	int last_layer_len = N-(K-1)*(R-1);
+	printf("\n");
 	for(int i=0; i<last_layer_len; i++){
-		printf("%.3f ", activation[i]);
+		printf("%.3f %d \t", activation[K-1][i], i);
 	}
 	printf("\n");
 	
 	printf("Elapsed time: %f\n", t_end - t_start);
+	
+	for(int i=0; i<K; i++) {
+		free(activation[i]);
+	}
 			
 	return 0;
 }
