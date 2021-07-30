@@ -16,7 +16,6 @@ float* single_layer(float *x, int N, float (*W)[R], float b, float *y)
 		for (j=0; j<R; j++) {
 			#pragma omp atomic
 			y[i] += x[i+j] * W[i][j];
-			//printf("tid: %d\n", omp_get_thread_num());
 			if(j == R-1) {
 				y[i] += b;
 				y[i] = 1.0 / (exp(-y[i]) + 1);
@@ -27,7 +26,8 @@ float* single_layer(float *x, int N, float (*W)[R], float b, float *y)
 	return y;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
 	int N = 10;
 	int K = 3;
@@ -53,14 +53,16 @@ int main(int argc, char *argv[]) {
 	printf("Using %d threads, input size:%d, number of layers:%d.\n", n_threads, N, K);
 
 	// Judge if the length of the k-th layer is bigger than 0
-	if (N - (K-1) * (R-1) <= 0) {
+	if (N - (K-1) * (R-1) <= 0)
+	{
 		printf("The parameters you input couldn't support k layers. Please give bigger size of layer 0 or use less layers.\n");
 		return 0;
 	}
 
 	// initialize the values of the first layer to 1
 	float x[N];
-	for (int i=0; i < N; i++){
+	for (int i=0; i < N; i++)
+	{
 		x[i] = 1.0;
 	}
 
@@ -72,7 +74,8 @@ int main(int argc, char *argv[]) {
 	float t_start = omp_get_wtime();
 
 	// Loop over k layers
-	for(int t=1; t<K; t++) {
+	for(int t=1; t<K; t++)
+	{
 		// calculate length of this layer
 		int layer_len = N - t * (R-1);
 
@@ -82,16 +85,19 @@ int main(int argc, char *argv[]) {
 		float W[layer_len][R];
 		// random Initialization to range [-1,1]
 		#pragma omp parallel for collapse(2) num_threads(n_threads)
-		for (int i=0; i<layer_len; i++) {
-			for (int j=0; j<R; j++) {
+		for (int i=0; i<layer_len; i++)
+		{
+			for (int j=0; j<R; j++)
+			{
 				W[i][j] = ((rand() % 2000) - 1000) / 1000.0;
 			}
 		}
 
 		// do the calculation
 		float y[layer_len];
-		#pragma omp parallel for
-		for(int i=0; i<layer_len; i++){
+		#pragma omp parallel for num_threads(n_threads)
+		for(int i=0; i<layer_len; i++)
+		{
 			y[i] = 0.0;
 		}
 		single_layer(activation, layer_len+R-1, W, b, y);
@@ -105,7 +111,8 @@ int main(int argc, char *argv[]) {
 	// print final result
 	printf("Final result is: ");
 	int last_layer_len = N-(K-1)*(R-1);
-	for(int i=0; i<last_layer_len; i++){
+	for(int i=0; i<last_layer_len; i++)
+	{
 		printf("%.3f ", activation[i]);
 	}
 	printf("\n");

@@ -9,26 +9,30 @@
 #include <math.h>
 
 #define R 3
-const int BLKDIM = R;
+const int BLKDIM = 128/R*R;
 
 __global__ void single_layer(float *x, int N, float *W, float *b, float *y)
 {
-  	int i = blockIdx.x;
-    int j = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  	int i = idx / R;
+    int j = idx - i * R;
 
-    __shared__ float local_y[R];
+    __shared__ float local_y[BLKDIM];
 
     if(i < N-R+1 && j < R)
     {
-  		local_y[j] = x[i+j] * W[i * blockDim.x + j];
-        printf("tidx %d %d x:%.2f W:%.2f y:%.2f \t", i, j, x[i+j], W[i * blockDim.x + j], local_y[j]);
+  		local_y[idx] = x[i+j] * W[i * R + j];
+        printf("tidx %d %d x:%.2f W:%.2f y:%.2f \t", i, j, x[i+j], W[i * R + j], local_y[idx]);
     }
 
     __syncthreads();
 
-    for(int k=0; k<R; k++)
+    for(int p=0; p<BLKDIM; p+=R)
     {
-        y[i] += local_y[k];
+        for(int q=p; q<R; q++)
+        {
+            y[i] += local_y[q];
+        }
     }
 
     if(j == R-1)
@@ -40,7 +44,7 @@ __global__ void single_layer(float *x, int N, float *W, float *b, float *y)
 
 int main( int argc, char *argv[] )
 {
-    int N = 10;
+    int N = 129;
   	int K = 4;
 
     // get parameters from command line
@@ -117,7 +121,8 @@ int main( int argc, char *argv[] )
         cudaMemcpy(y_d, y, layer_len*sizeof(float), cudaMemcpyHostToDevice);
 
   		// do the calculation
-  		single_layer<<<layer_len, BLKDIM>>>(activation_d, layer_len+R-1, W_d, b_d, y_d);
+        printf("\nBLKDIM: %d\n", BLKDIM);
+  		single_layer<<<(layer_len+BLKDIM-1)/BLKDIM, BLKDIM>>>(activation_d, layer_len+R-1, W_d, b_d, y_d);
         cudaDeviceSynchronize();
 
         // copy result back
@@ -137,6 +142,8 @@ int main( int argc, char *argv[] )
         // free cuda memory
         cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);
   	}
+
+    cudaFree(activation_d);
 
 	// print final result
 	printf("\nFinal result is: ");
