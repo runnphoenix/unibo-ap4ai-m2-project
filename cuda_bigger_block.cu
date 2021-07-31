@@ -9,43 +9,44 @@
 #include <math.h>
 
 #define R 3
-const int BLKDIM = 128/R*R;
+const int BLKDIM = 128/R*R*R;
 
 __global__ void single_layer(float *x, int N, float *W, float *b, float *y)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  	int i = idx / R;
-    int j = idx - i * R;
+    int gidx = blockIdx.x * blockDim.x + threadIdx.x;
+    int lidx = threadIdx.x;
+  	int i = gidx / R;
+    int j = gidx - i * R;
 
     __shared__ float local_y[BLKDIM];
 
     if(i < N-R+1 && j < R)
     {
-  		local_y[idx] = x[i+j] * W[i * R + j];
-        printf("tidx %d %d x:%.2f W:%.2f y:%.2f \t", i, j, x[i+j], W[i * R + j], local_y[idx]);
+  		local_y[lidx] = x[i+j] * W[i * R + j];
+        printf("tidx %d %d x:%.2f W:%.2f y:%.2f \t", i, j, x[i+j], W[i * R + j], local_y[lidx]);
     }
 
     __syncthreads();
 
-    for(int p=0; p<BLKDIM; p+=R)
+    for(int p=0; p<R; p++)
     {
-        for(int q=p; q<R; q++)
-        {
-            y[i] += local_y[q];
-        }
+        y[i] += local_y[lidx + p];
     }
+    __syncthreads();
+    printf("tidxx %d %d y:%.2f \t", i, j, y[i]);
 
     if(j == R-1)
     {
         y[i] += *b;
+        printf("tidxxx %d %d y:%.2f \t", i, j, y[i]);
         y[i] = 1.0 / (exp(-y[i]) + 1);
     }
 }
 
 int main( int argc, char *argv[] )
 {
-    int N = 129;
-  	int K = 4;
+    int N = 200;
+  	int K = 99;
 
     // get parameters from command line
     int c;
