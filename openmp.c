@@ -17,7 +17,7 @@ float* single_layer_calc(float *x, float (*W)[R], float b, float *y, int N)
 		for (j=0; j<R; j++) {
 			y[i] += x[i+j] * W[i][j];
 		}
-		y[i] = 1.0 / (exp(-(y[i]+b)) + 1);
+		y[i] = 1.0 / (exp(-(y[i]+b)) + 1); // +b, then sigmoid
 	}
 
 	return y;
@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
 		int in_layer_len = layer_len + R - 1; // the length of the input layer
 		single_layer_calc(latest_layer, W, b, y, in_layer_len);
 
-		// save the temp result y to latest_layer
+		// copy the layer result to latest_layer
 		memcpy(latest_layer, y, layer_len * sizeof(float));
 	}
 
