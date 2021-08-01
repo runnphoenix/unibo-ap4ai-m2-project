@@ -1,6 +1,9 @@
 /****************************************************************************
-*
+ * TODO
+ * 1. extract layer_initialize function
+ * 2. extract parameter_parsing function
  ****************************************************************************/
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,6 +77,7 @@ int main( int argc, char *argv[] )
 
     // create an activation
   	float activation[N];
+
     float *activation_d;
     cudaMalloc((void**)&activation_d, N*sizeof(float));
   	memcpy(activation, x, N*sizeof(float));
@@ -89,14 +93,20 @@ int main( int argc, char *argv[] )
   		// initialize parameters b
   		//float b = rand() % 3 - 1;
         float b = 1.0;
-        float *b_d;
-        cudaMalloc((void**)&b_d, sizeof(float));
-        cudaMemcpy(b_d, &b, sizeof(float), cudaMemcpyHostToDevice);
+        float W[layer_len][R];
+        float y[layer_len];
 
-        // parameter W
-  		float W[layer_len][R];
+
+        float *b_d;
         float *W_d;
+        float *y_d;
+
+
+        cudaMalloc((void**)&b_d, sizeof(float));
         cudaMalloc((void**)&W_d, layer_len*R*sizeof(float));
+        cudaMalloc((void**)&y_d, layer_len*sizeof(float));
+
+
   		// random Initialization to range [-1,1]
   		#pragma omp parallel for collapse(2) num_threads(n_threads)
   		for (int i=0; i<layer_len; i++) {
@@ -105,30 +115,22 @@ int main( int argc, char *argv[] )
                   W[i][j] = 1.0 / 3;
   			}
   		}
-        cudaMemcpy(W_d, W, layer_len*R*sizeof(float), cudaMemcpyHostToDevice);
-
-        //y
-        float y[layer_len];
-        float *y_d;
-        cudaMalloc((void**)&y_d, layer_len*sizeof(float));
         for(int i=0; i<layer_len; i++){
             y[i] = 0.0;
         }
+
+
+        cudaMemcpy(b_d, &b, sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(W_d, W, layer_len*R*sizeof(float), cudaMemcpyHostToDevice);
         cudaMemcpy(y_d, y, layer_len*sizeof(float), cudaMemcpyHostToDevice);
 
   		// do the calculation
   		single_layer<<<layer_len, BLKDIM>>>(activation_d, layer_len+R-1, W_d, b_d, y_d);
+
         cudaDeviceSynchronize();
 
         // copy result back
         cudaMemcpy(y, y_d, layer_len*sizeof(float), cudaMemcpyDeviceToHost);
-
-        //TEST
-        printf("\nThe layer result got\n");
-        for(int i=0; i<layer_len; i++){
-            printf("%f ", y[i]);
-        }
-        printf("\n");
 
   		// save the activation result
   		memcpy(activation, y, layer_len * sizeof(float));
