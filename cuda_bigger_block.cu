@@ -1,6 +1,9 @@
 /****************************************************************************
-*
+ * TODO
+ * 1. extract layer_initialize function
+ * 2. extract parameter_parsing function
  ****************************************************************************/
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,38 +12,78 @@
 #include <math.h>
 
 #define R 3
-const int BLKDIM = 128/R*R*R;
+const int BLKDIM = (64/R*R)*R;
 
-__global__ void single_layer(float *x, int N, float *W, float *b, float *y)
+/*  BLKDIM optimization
+ *  # of threads shoule be able to divide (32 * R)
+ *  (n_node / R * R) is # of nodes being able to divide R  ->
+ *  (n_node / R * R) * R is # of threads being able to divide R
+ */
+
+__global__ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
 {
     int gidx = blockIdx.x * blockDim.x + threadIdx.x;
     int lidx = threadIdx.x;
   	int i = gidx / R;
     int j = gidx - i * R;
+ 
+    float tmp = 0.0;
 
     __shared__ float local_y[BLKDIM];
 
     if(i < N-R+1 && j < R)
     {
-  		local_y[lidx] = x[i+j] * W[i * R + j];
-        printf("tidx %d %d x:%.2f W:%.2f y:%.2f \t", i, j, x[i+j], W[i * R + j], local_y[lidx]);
+        local_y[lidx] = x[i+j] * W[i * R + j];
+        //printf("i:%d j:%d lidx: %d x:%.2f W:%.2f y:%.2f  ", i, j, lidx, x[i+j], W[i * R + j], local_y[lidx]);
     }
 
     __syncthreads();
+    //printf("\n");
 
-    for(int p=0; p<R; p++)
-    {
-        y[i] += local_y[lidx + p];
+    if(i < N-R+1 && j < R){
+        for(int p=0; p<R; p++)
+        {
+            tmp += local_y[lidx + p];
+            //printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \t", i,j,lidx, local_y[lidx+p], tmp);
+        }
     }
+    
     __syncthreads();
-    printf("tidxx %d %d y:%.2f \t", i, j, y[i]);
+    
+    tmp = 1.0 / (expf(-tmp - *b) + 1);
+    y[i] = tmp;
+}
 
-    if(j == R-1)
-    {
-        y[i] += *b;
-        printf("tidxxx %d %d y:%.2f \t", i, j, y[i]);
-        y[i] = 1.0 / (exp(-y[i]) + 1);
-    }
+/* Initialize the W and b parameters for one layer */
+void init_layer_parameters(float (*W)[R], float w_v, float *b, float b_v, int layer_len)
+{
+	for (int i=0; i<layer_len; i++)
+	{
+		for (int j=0; j<R; j++)
+			{
+				W[i][j] = w_v;
+			}
+	}
+
+	*b = b_v;
+}
+
+/* Read in the network parameters (N, K) from command-line input. */
+void parse_command_line_parameters(int argc, char *argv[], int *N, int *K)
+{
+	int c;
+	while ((c = getopt (argc, argv, "n:k:")) != -1)
+	{
+		switch (c)
+		{
+			case 'n': // N
+				*N = atoi(optarg);
+				break;
+			case 'k': // K
+				*K = atoi(optarg);
+				break;
+		}
+	}
 }
 
 int main( int argc, char *argv[] )
@@ -48,22 +91,9 @@ int main( int argc, char *argv[] )
     int N = 200;
   	int K = 99;
 
-    // get parameters from command line
-    int c;
-    while ((c = getopt (argc, argv, "n:k:")) != -1)
-    {
-        switch (c)
-        {
-            case 'n':
-                N = atoi(optarg);
-                break;
-            case 'k':
-                K = atoi(optarg);
-                break;
-        }
-    }
-
-    printf("%d %d\n", N, K);
+    // get N, K from command line
+	parse_command_line_parameters(argc, argv, &N, &K);
+	printf("input size:%d, number of layers:%d.\n",  N, K);
 
     // Judge if the length of the k-th layer is bigger than 0
   	if (N - (K-1) * (R-1) <= 0) {
@@ -79,51 +109,46 @@ int main( int argc, char *argv[] )
 
     // create an activation
   	float activation[N];
+    memcpy(activation, x, N*sizeof(float));
+
     float *activation_d;
     cudaMalloc((void**)&activation_d, N*sizeof(float));
-  	memcpy(activation, x, N*sizeof(float));
     cudaMemcpy(activation_d, activation, N*sizeof(float), cudaMemcpyHostToDevice);
 
   	// start recording time
 
     // Loop over k layers
-  	for(int t=1; t<K; t++) {
+  	for(int t=1; t<K; t++)
+    {
         // calculate length of this layer
         int layer_len = N - t * (R-1);
 
   		// initialize parameters b
-  		//float b = rand() % 3 - 1;
-        float b = 1.0;
-        float *b_d;
-        cudaMalloc((void**)&b_d, sizeof(float));
-        cudaMemcpy(b_d, &b, sizeof(float), cudaMemcpyHostToDevice);
-
-        // parameter W
-  		float W[layer_len][R];
-        float *W_d;
-        cudaMalloc((void**)&W_d, layer_len*R*sizeof(float));
-  		// random Initialization to range [-1,1]
-  		#pragma omp parallel for collapse(2) num_threads(n_threads)
-  		for (int i=0; i<layer_len; i++) {
-  			for (int j=0; j<R; j++) {
-  				//W[i][j] = ((rand() % 2000) - 1000) / 1000.0;
-                  W[i][j] = 1.0 / 3;
-  			}
-  		}
-        cudaMemcpy(W_d, W, layer_len*R*sizeof(float), cudaMemcpyHostToDevice);
-
-        //y
+        float b;
+        float W[layer_len][R];
         float y[layer_len];
+     
+        //float b_v = rand() % 3 - 1;
+        //float W_v = ((rand() % 2000) - 1000) / 1000.0;
+        float b_v = 1.0;
+        float W_v = 1.0 / 3;
+        init_layer_parameters(W, W_v, &b, b_v, layer_len);
+     
+        float *b_d;
+        float *W_d;
         float *y_d;
+    
+        cudaMalloc((void**)&b_d, sizeof(float));
+        cudaMalloc((void**)&W_d, layer_len*R*sizeof(float));
         cudaMalloc((void**)&y_d, layer_len*sizeof(float));
-        for(int i=0; i<layer_len; i++){
-            y[i] = 0.0;
-        }
+
+        cudaMemcpy(b_d, &b, sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(W_d, W, layer_len*R*sizeof(float), cudaMemcpyHostToDevice);
         cudaMemcpy(y_d, y, layer_len*sizeof(float), cudaMemcpyHostToDevice);
 
   		// do the calculation
-        printf("\nBLKDIM: %d\n", BLKDIM);
-  		single_layer<<<(layer_len+BLKDIM-1)/BLKDIM, BLKDIM>>>(activation_d, layer_len+R-1, W_d, b_d, y_d);
+        printf("\nGRIDDIM %d BLKDIM: %d\n", (layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM);
+  		one_layer_calc<<<(layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM>>>(activation_d, W_d, b_d, y_d, layer_len+R-1);
         cudaDeviceSynchronize();
 
         // copy result back
@@ -132,7 +157,7 @@ int main( int argc, char *argv[] )
         //TEST
         printf("\nThe layer result got\n");
         for(int i=0; i<layer_len; i++){
-            printf("%f ", y[i]);
+            printf("%.2f ", y[i]);
         }
         printf("\n");
 
