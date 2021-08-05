@@ -12,7 +12,7 @@
 #include <math.h>
 
 #define R 3
-const int BLKDIM = (64/R*R)*R;
+const int BLKDIM = (32/R*R)*R;
 
 /*  BLKDIM optimization
  *  # of threads shoule be able to divide (32 * R)
@@ -26,6 +26,8 @@ __global__ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
     int lidx = threadIdx.x;
   	int i = gidx / R;
     int j = gidx - i * R;
+    int li = lidx / R;
+    int lj = lidx - li * R;
  
     float tmp = 0.0;
 
@@ -34,19 +36,29 @@ __global__ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
     if(i < N-R+1 && j < R)
     {
         local_y[lidx] = x[i+j] * W[i * R + j];
-        //printf("i:%d j:%d lidx: %d x:%.2f W:%.2f y:%.2f  ", i, j, lidx, x[i+j], W[i * R + j], local_y[lidx]);
+        printf("i:%d j:%d lidx: %d x:%.2f W:%.2f y:%.2f \n", i, j, lidx, x[i+j], W[i * R + j], local_y[lidx]);
     }
 
     __syncthreads();
     //printf("\n");
 
+	/*
     if(i < N-R+1 && j < R){
         for(int p=0; p<R; p++)
         {
             tmp += local_y[lidx + p];
-            //printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \t", i,j,lidx, local_y[lidx+p], tmp);
+            printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \n", i,j,lidx, local_y[lidx+p], tmp);
         }
     }
+    */
+    
+    
+    for (int p=0; p<R; p++)
+    {
+    	tmp += local_y[li * R + p];
+    	printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \n", i,j,lidx, local_y[li * R + p], tmp);
+    }
+
     
     __syncthreads();
     
