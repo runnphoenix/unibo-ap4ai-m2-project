@@ -1,7 +1,6 @@
 /****************************************************************************
  * TODO
- * 1. extract layer_initialize function
- * 2. extract parameter_parsing function
+
  ****************************************************************************/
 
 
@@ -10,9 +9,10 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 #define R 3
-const int BLKDIM = (32/R*R)*R;
+const int BLKDIM = (128/R*R)*R;
 
 /*  BLKDIM optimization
  *  # of threads shoule be able to divide (32 * R)
@@ -36,30 +36,18 @@ __global__ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
     if(i < N-R+1 && j < R)
     {
         local_y[lidx] = x[i+j] * W[i * R + j];
-        printf("i:%d j:%d lidx: %d x:%.2f W:%.2f y:%.2f \n", i, j, lidx, x[i+j], W[i * R + j], local_y[lidx]);
+        //printf("i:%d j:%d lidx: %d x:%.2f W:%.2f y:%.2f \n", i, j, lidx, x[i+j], W[i * R + j], local_y[lidx]);
     }
 
     __syncthreads();
-    //printf("\n");
-
-	/*
-    if(i < N-R+1 && j < R){
-        for(int p=0; p<R; p++)
-        {
-            tmp += local_y[lidx + p];
-            printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \n", i,j,lidx, local_y[lidx+p], tmp);
-        }
-    }
-    */
-    
+    //printf("\n");  
     
     for (int p=0; p<R; p++)
     {
     	tmp += local_y[li * R + p];
-    	printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \n", i,j,lidx, local_y[li * R + p], tmp);
+    	//printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \n", i,j,lidx, local_y[li * R + p], tmp);
     }
 
-    
     __syncthreads();
     
     tmp = 1.0 / (expf(-tmp - *b) + 1);
@@ -100,8 +88,8 @@ void parse_command_line_parameters(int argc, char *argv[], int *N, int *K)
 
 int main( int argc, char *argv[] )
 {
-    int N = 200;
-  	int K = 99;
+    int N = 100;
+  	int K = 3;
 
     // get N, K from command line
 	parse_command_line_parameters(argc, argv, &N, &K);
@@ -120,14 +108,14 @@ int main( int argc, char *argv[] )
   	}
 
     // create an activation
-  	float activation[N];
+	float activation[N];
     memcpy(activation, x, N*sizeof(float));
 
     float *activation_d;
     cudaMalloc((void**)&activation_d, N*sizeof(float));
     cudaMemcpy(activation_d, activation, N*sizeof(float), cudaMemcpyHostToDevice);
 
-  	// start recording time
+    clock_t start = clock();
 
     // Loop over k layers
   	for(int t=1; t<K; t++)
@@ -159,14 +147,14 @@ int main( int argc, char *argv[] )
         cudaMemcpy(y_d, y, layer_len*sizeof(float), cudaMemcpyHostToDevice);
 
   		// do the calculation
-        printf("\nGRIDDIM %d BLKDIM: %d\n", (layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM);
+        //printf("\nGRIDDIM %d BLKDIM: %d\n", (layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM);
   		one_layer_calc<<<(layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM>>>(activation_d, W_d, b_d, y_d, layer_len+R-1);
         cudaDeviceSynchronize();
 
         // copy result back
         cudaMemcpy(y, y_d, layer_len*sizeof(float), cudaMemcpyDeviceToHost);
 
-        //TEST
+		//* TEST
         printf("\nThe layer result got\n");
         for(int i=0; i<layer_len; i++){
             printf("%.2f ", y[i]);
@@ -180,6 +168,12 @@ int main( int argc, char *argv[] )
         // free cuda memory
         cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);
   	}
+
+
+	// calculate elapsed time
+	clock_t end = clock();
+	double time_elapsed = (double)(end - start) / CLOCKS_PER_SEC;
+	printf("Time elapsed: %.3f\n", time_elapsed);
 
     cudaFree(activation_d);
 
