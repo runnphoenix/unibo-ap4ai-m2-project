@@ -7,11 +7,12 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+#include <math.h>
 
 #define R 3
 const int BLKDIM = R;
 
-__global__ void single_layer(float *x, int N, float *W, float b, float *y)
+__global__ void single_layer(float *x, int N, float *W, float *b, float *y)
 {
   	int i = blockIdx.x;
     int j = threadIdx.x;
@@ -19,14 +20,15 @@ __global__ void single_layer(float *x, int N, float *W, float b, float *y)
     if(i < N-R+1 && j < R)
     {
   		y[i] += x[i+j] * W[i * R + j];
+  		printf("%.2f ", y[i]);
   		if(j == R-1)
         {
-  			y[i] += b;
-            //y[i] = 1.0 / (exp(-y[i]) + 1);
-         
-            //printf("kernel-%d_layer-%f ", (10-(N-R+1))/2, x[i]);
-            //printf("kennel-%d_layer-%f ", (10-(N-R+1))/2, y[i]);
+  			y[i] += *b;
+  			printf("%.2f ", y[i]);
+			y[i] = 1.0 / ( expf(-y[i]) + 1 );
+			printf("%.2f \n", y[i]);
   		}
+  		printf("%.2f \n", y[i]);
     }
 }
 
@@ -61,7 +63,7 @@ int main( int argc, char *argv[] )
     // initialize the values of the first layer to 1
   	float x[N];
   	for (int i=0; i < N; i++) {
-  		x[i] = 1.0;
+  		x[i] = -1.0;
   	}
 
     // create an activation
@@ -72,6 +74,7 @@ int main( int argc, char *argv[] )
     cudaMemcpy(activation_d, activation, N*sizeof(float), cudaMemcpyHostToDevice);
 
   	// start recording time
+  	clock_t start = clock();
 
     // Loop over k layers
   	for(int t=1; t<K; t++) {
@@ -80,8 +83,10 @@ int main( int argc, char *argv[] )
 
   		// initialize parameters b
   		//float b = rand() % 3 - 1;
-          float b = 0.0;
-        float b_d;
+        float b = 1.0;
+        float *b_d;
+        cudaMalloc( (void**)&b_d, sizeof(float) );
+        cudaMemcpy(b_d, &b, sizeof(float), cudaMemcpyHostToDevice);
 
         // parameter W
   		float W[layer_len][R];
@@ -107,26 +112,35 @@ int main( int argc, char *argv[] )
         cudaMemcpy(y_d, y, layer_len*sizeof(float), cudaMemcpyHostToDevice);
 
   		// do the calculation
-  		single_layer<<<layer_len, BLKDIM>>>(activation_d, layer_len+R-1, W_d, b, y_d);
+  		single_layer<<<layer_len, BLKDIM>>>(activation_d, layer_len+R-1, W_d, b_d, y_d);
+  		
         cudaDeviceSynchronize();
 
         // copy result back
         cudaMemcpy(y, y_d, layer_len*sizeof(float), cudaMemcpyDeviceToHost);
 
-        //TEST
+        /*TEST
         printf("\nThe layer result got\n");
         for(int i=0; i<layer_len; i++){
             printf("%f ", y[i]);
         }
         printf("\n");
+        */
 
   		// save the activation result
   		memcpy(activation, y, layer_len * sizeof(float));
         cudaMemcpy(activation_d, activation, layer_len*sizeof(float), cudaMemcpyHostToDevice);
 
         // free cuda memory
-        cudaFree(W_d); cudaFree(y_d);
+        cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);
   	}
+  	
+  	// calculate elapsed time
+    clock_t end = clock();
+    double time_elapsed = (double)(end - start) / CLOCKS_PER_SEC;
+    printf("Time elapsed: %.3f\n", time_elapsed);
+
+
  
 	// print final result
 	printf("\nFinal result is: ");
