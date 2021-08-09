@@ -19,17 +19,20 @@ __global__ void single_layer(float *x, int N, float *W, float *b, float *y)
 
     if(i < N-R+1 && j < R)
     {
-  		y[i] += x[i+j] * W[i * R + j];
-  		printf("%.2f ", y[i]);
-  		if(j == R-1)
-        {
-  			y[i] += *b;
-  			printf("%.2f ", y[i]);
-			y[i] = 1.0 / ( expf(-y[i]) + 1 );
-			printf("%.2f \n", y[i]);
-  		}
-  		printf("%.2f \n", y[i]);
+		for( int t=0; t<R; t++) {
+			//printf("previous: %.2f ", y[i]);
+  			y[i] += x[i+j] * W[i * R + j];
+  			//printf("after: %.2f ", y[i]);
+		}
     }
+
+	__syncthreads();
+	//printf("i: %d, j:%d, y[i]:%f\n", i,j,y[i]);
+
+	y[i] = 1.0 / (expf( -y[i] - *b) + 1.0);
+	
+	//printf("%.2f ", y[i]);
+
 }
 
 int main( int argc, char *argv[] )

@@ -27,7 +27,7 @@
 #include <time.h>
 
 #define R 3
-const int BLKDIM = (128/R*R)*R;
+const int BLKDIM = (64/R*R)*R;
 
 /*  BLKDIM optimization
  *  # of threads shoule be able to divide (32 * R)
