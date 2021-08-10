@@ -80,6 +80,12 @@ __global__ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
     y[gi] = y_tmp;
 }
 
+/* Random values between -1 and 1 */
+float random_init_small()
+{
+	return ((rand() % 2000) - 1000) / 1000.0;     // random Initialization to values in range [-1,1]
+}
+
 /* Initialize the W and b parameters for one layer */
 //TODO: change to initialize all parameters
 void init_layer_parameters(float (*W)[R], float w_v, float *b, float b_v, int layer_len)
@@ -111,6 +117,8 @@ void parse_command_line_parameters(int argc, char *argv[], int *N, int *K)
 
 int main( int argc, char *argv[] )
 {
+	srand(42);
+	
     int N = 100;
     int K = 3;
 
@@ -132,27 +140,19 @@ int main( int argc, char *argv[] )
 	int total_y_len = K * (first_layer_len + last_layer_len) / 2;
 	int total_W_len = total_y_len * R;
 	
-	float *b = (float*)malloc(total_b_len * sizeof(float));
-	float *y = (float*)malloc(total_y_len * sizeof(float));
-	float *W = (float*)malloc(total_W_len * sizeof(float));
+	float *b = (float*) malloc(total_b_len * sizeof(float));
+	float *y = (float*) malloc(total_y_len * sizeof(float));
+	float *W = (float*) malloc(total_W_len * sizeof(float));
 	
 	// initialize the values of y, w and b
-	//float b_v = rand() % 3 - 1;
-    //float W_v = ((rand() % 2000) - 1000) / 1000.0;
-    //init_layer_parameters(W, W_v, &b, b_v, layer_len);
 	for (int i=0; i < total_y_len; i++) {
-		if(i < N) {
-        	y[i] = -1.0;
-        }
-        else {
-        	y[i] = 0.0;
-        }
+        y[i] = random_init_small();
     }
     for (int i=0; i < K-1; i++) {
-		b[i] = 1.0;
+		b[i] = random_init_small();
     }
-    for (int i=0; i < total_y_len * R; i++) {
-		W[i] = 1.0 / 3;
+    for (int i=0; i < total_W_len; i++) {
+		W[i] = random_init_small();
     }
 	
 	// create gpu related b, w and y
@@ -181,25 +181,22 @@ int main( int argc, char *argv[] )
         // calculation of each layer
         // printf("\nGRIDDIM %d BLKDIM: %d\n", (layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM);
         int y_start_idx = k * (N + N - (k-1)*(R-1)) / 2;
-        int x_start_idx = (k-1) * (N+N-(k-2)*(R-1)) / 2;
+        int x_start_idx = (k-1) * (N + N - (k-2)*(R-1)) / 2;
         int W_start_idx = y_start_idx * R;
         
-        one_layer_calc<<<(layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM>>>(y_d + x_start_idx, W_d + W_start_idx, b_d + (k-1), y_d + y_start_idx, in_layer_len);
+        one_layer_calc<<<(layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM>>>(y_d + x_start_idx, W_d + W_start_idx, \
+                                                                  b_d + (k-1), y_d + y_start_idx, in_layer_len);
 
         cudaDeviceSynchronize();
     }
     
     // copy result back to host
     cudaMemcpy(y, y_d, total_y_len * sizeof(float), cudaMemcpyDeviceToHost);
-    // Free cuda memory
-    cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);
 
     // calculate elapsed time
     clock_t end = clock();
     double time_elapsed = (double)(end - start) / CLOCKS_PER_SEC;
     printf("Time elapsed: %.3f\n", time_elapsed);
-
-    cudaFree(b_d); cudaFree(W_d); cudaFree(y_d);
 
     // print final result
     printf("\nFinal result is: ");
@@ -207,6 +204,10 @@ int main( int argc, char *argv[] )
         printf("%.3f ", y[i]);
     }
     printf("\n");
+    
+    // Free memory
+    cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);  // free cuda memory
+    free(b); free(W); free(y);                    // free heap memory
 
     return EXIT_SUCCESS;
 }
