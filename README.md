@@ -22,24 +22,24 @@
 		where -lm is used for linking the math library
 
 	- Run with:
-		`./serial -n # of nodes -k # of layers`
+		`./serial -n number_of_nodes -k number_of_layers`
 
 - openmp.c
 	- Compile with:
 		`gcc -fopenmp openmp.c -o openmp`
 		OR
-		`gcc openmp.c -o openmp -lm`
+		`gcc -fopenmp openmp.c -o openmp -lm`
 		where -lm is used for linking the math library
 
 	- Run with:
-		`./openmp -t # of threads -n # of nodes -k # of layers`
+		`./openmp -t number_of_threads -n number_of_nodes -k number_of_layers`
 
 - cuda.cu
 	- Compile with:
 		`nvcc cuda.cu -o cuda`
 
 	- Run with:
-		`./cuda -n # of nodes -k # of layers`
+		`./cuda -n number_of_nodes -k number_of_layers`
 		
 	- Profile with
-		`sudo nvprof ./cuda -n # of nodes -k # of layers`
+		`sudo nvprof ./cuda -n number_of_nodes -k number_of_layers`
