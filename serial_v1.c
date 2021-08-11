@@ -36,8 +36,10 @@ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
 {
 	int i,j;
 	for (i=0; i<N-R+1; i++) {
+		*(y+i) = 0.0;
 		for (j=0; j<R; j++) {
 			*(y+i) += *(x+i+j) * *(W+i*R+j);
+			//printf("X: %.2f w: %.2f y: %.2f \n", *(x+i+j), *(W+i*R+j), *(y+i));
 		}
 		*(y+i) = 1.0 / (exp(-*(y+i) - *b) + 1); // +b, then sigmoid
 	}
@@ -90,7 +92,7 @@ int main(int argc, char *argv[])
 	int first_layer_len = N; // input included
 	int total_b_len = K - 1;
 	int total_y_len = K * (first_layer_len + last_layer_len) / 2;
-	int total_W_len = total_y_len * R;
+	int total_W_len = (total_y_len - N) * R;
 	
 	float *b = (float*) malloc(total_b_len * sizeof(float));
 	float *y = (float*) malloc(total_y_len * sizeof(float));
@@ -98,7 +100,7 @@ int main(int argc, char *argv[])
 	
 	// initialize the values of y, w and b
 	for (int i=0; i < total_y_len; i++) {
-        y[i] = random_init_small();
+		y[i] = random_init_small();
     }
     for (int i=0; i < K-1; i++) {
 		b[i] = random_init_small();
@@ -106,6 +108,22 @@ int main(int argc, char *argv[])
     for (int i=0; i < total_W_len; i++) {
 		W[i] = random_init_small();
     }
+    
+    /*/TEST
+    for (int i=0; i < total_y_len; i++) {
+        printf("%.2f ",y[i]);
+    }
+    printf("\n");
+    for (int i=0; i < K-1; i++) {
+		printf("%.2f ",b[i]);
+    }
+    printf("\n");
+    for (int i=0; i < total_W_len; i++) {
+		printf("%.2f ",W[i]);
+    }
+    printf("\n");
+    */
+    
 
 	// Start recording time costage
     clock_t start = clock();
@@ -117,7 +135,7 @@ int main(int argc, char *argv[])
 
         int y_start_idx = k * (N + N - (k-1)*(R-1)) / 2;
         int x_start_idx = (k-1) * (N + N - (k-2)*(R-1)) / 2;
-        int W_start_idx = y_start_idx * R;		
+        int W_start_idx = (y_start_idx - N) * R;		
 
 		one_layer_calc(y + x_start_idx, W + W_start_idx, b + (k-1), y + y_start_idx, in_layer_len); // calculation on this layer, update y
 	}
@@ -134,7 +152,8 @@ int main(int argc, char *argv[])
 	printf("\n");
 
 	// print the time consumption
-	printf("Elapsed time: %f\n", time_elapsed);
+	printf("Elapsed time: %fs\n", time_elapsed);
+	printf("\n");
 	
 	free(b); free(W); free(y);   // free heap memory
 

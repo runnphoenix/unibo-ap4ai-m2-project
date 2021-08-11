@@ -50,13 +50,13 @@ __global__ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
     int li = lidx / R;            // local node index
     int j = gidx - gi * R;        // index of related values in previous layer for each value in y
 
-    int pre_layer_len = N - R + 1; 
+    int layer_len = N - R + 1; 
  
     float y_tmp = 0.0;
     // shared memory used to store local values in y
     __shared__ float local_y[BLKDIM];
 
-    if(gi < pre_layer_len && j < R) {
+    if(gi < layer_len && j < R) {
         local_y[lidx] = x[gi + j] * W[gi * R + j];
         //printf("i:%d j:%d lidx: %d x:%.2f W:%.2f y:%.2f \n", \
                   gi, j, lidx, x[gi+j], W[gi * R + j], local_y[lidx]);
@@ -66,18 +66,21 @@ __global__ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
     //printf("\n");  
     
     // Accumulate R values of each node in y
-    for (int p=0; p<R; p++) {
-        y_tmp += local_y[li * R + p];
-        //printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \n", gi,j,lidx, local_y[li * R + p], y_tmp);
+    if(gi < layer_len && j < R){
+    	for (int p=0; p<R; p++) {
+        	y_tmp += local_y[li * R + p];
+        	//printf("i:%d j:%d lidx: %d local_y:%.2f tmp:%.2f \n", gi,j,lidx, local_y[li * R + p], y_tmp);
+    	}
     }
 
-    __syncthreads();
+    //__syncthreads();
    
-    // Sigmoid
-    y_tmp = Sigmoid(y_tmp, *b);
-
-    // Copy temp values to y
-    y[gi] = y_tmp;
+    if(gi < layer_len){
+    	// Sigmoid
+    	y_tmp = Sigmoid(y_tmp, *b);
+    	// Copy temp values to y
+    	*(y+gi) = y_tmp;
+    }
 }
 
 /* Random values between -1 and 1 */
@@ -88,16 +91,6 @@ float random_init_small()
 
 /* Initialize the W and b parameters for one layer */
 //TODO: change to initialize all parameters
-void init_layer_parameters(float (*W)[R], float w_v, float *b, float b_v, int layer_len)
-{
-    for (int i=0; i<layer_len; i++) {
-        for (int j=0; j<R; j++) {
-            W[i][j] = w_v;
-        }
-    }
-
-    *b = b_v;
-}
 
 /* Read in the network parameters (N, K) from command-line input. */
 void parse_command_line_parameters(int argc, char *argv[], int *N, int *K)
@@ -138,7 +131,7 @@ int main( int argc, char *argv[] )
 	int first_layer_len = N; // input included
 	int total_b_len = K - 1;
 	int total_y_len = K * (first_layer_len + last_layer_len) / 2;
-	int total_W_len = total_y_len * R;
+	int total_W_len = (total_y_len - N) * R;
 	
 	float *b = (float*) malloc(total_b_len * sizeof(float));
 	float *y = (float*) malloc(total_y_len * sizeof(float));
@@ -154,6 +147,22 @@ int main( int argc, char *argv[] )
     for (int i=0; i < total_W_len; i++) {
 		W[i] = random_init_small();
     }
+    
+    /*/TEST
+    for (int i=0; i < total_y_len; i++) {
+        printf("%.2f ", y[i]);
+    }
+    printf("\n");
+    for (int i=0; i < K-1; i++) {
+		printf("%.2f ", b[i]);
+    }
+    printf("\n");
+    for (int i=0; i < total_W_len; i++) {
+		printf("%.2f ", W[i]);
+    }
+    printf("\n");
+    */
+    
 	
 	// create gpu related b, w and y
 	float *b_d;
@@ -182,7 +191,7 @@ int main( int argc, char *argv[] )
         // printf("\nGRIDDIM %d BLKDIM: %d\n", (layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM);
         int y_start_idx = k * (N + N - (k-1)*(R-1)) / 2;
         int x_start_idx = (k-1) * (N + N - (k-2)*(R-1)) / 2;
-        int W_start_idx = y_start_idx * R;
+        int W_start_idx = (y_start_idx-N) * R;
         
         one_layer_calc<<<(layer_len*R+BLKDIM-1)/BLKDIM, BLKDIM>>>(y_d + x_start_idx, W_d + W_start_idx, \
                                                                   b_d + (k-1), y_d + y_start_idx, in_layer_len);
@@ -193,17 +202,18 @@ int main( int argc, char *argv[] )
     // copy result back to host
     cudaMemcpy(y, y_d, total_y_len * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // calculate elapsed time
-    clock_t end = clock();
-    double time_elapsed = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("Time elapsed: %.3f\n", time_elapsed);
-
     // print final result
     printf("\nFinal result is: ");
     for(int i=(total_y_len - last_layer_len); i<total_y_len; i++) {
         printf("%.3f ", y[i]);
     }
     printf("\n");
+    
+    // calculate elapsed time
+    clock_t end = clock();
+    double time_elapsed = (double)(end - start) / CLOCKS_PER_SEC;
+    printf("Elapsed time: %.3fs\n", time_elapsed);
+    
     
     // Free memory
     cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);  // free cuda memory

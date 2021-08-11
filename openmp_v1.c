@@ -33,17 +33,17 @@
 int n_threads;
 
 /* The calculation of y values for one layer */
-void one_layer_calc(float *x, float (*W)[R], float b, float *y, int N)
+void one_layer_calc(float *x, float *W, float *b, float *y, int N)
 {
 	int i,j;
 	#pragma omp parallel for private(j) num_threads(n_threads)
 	for (i=0; i<N-R+1; i++) {
-		y[i] = 0.0;
+		*(y+i) = 0.0;
 		for (j=0; j<R; j++) {
-			y[i] += x[i+j] * W[i][j];
+			*(y+i) += *(x+i+j) * *(W+i*R+j);
 		}
 		// Sigmoid
-		y[i] = 1.0 / (exp(-(y[i]+b)) + 1); // +b, then sigmoid
+		*(y+i) = 1.0 / (exp(-*(y+i) - *b) + 1); // +b, then sigmoid
 	}
 }
 
@@ -51,19 +51,6 @@ void one_layer_calc(float *x, float (*W)[R], float b, float *y, int N)
 float random_init_small()
 {
 	return ((rand() % 2000) - 1000) / 1000.0;     // random Initialization to values in range [-1,1]
-}
-
-/* Initialize the W and b parameters for one layer */
-void init_layer_parameters(float (*W)[R], float *b, int layer_len)
-{
-	//#pragma omp parallel for collapse(2) num_threads(n_threads)
-	for (int i=0; i<layer_len; i++) {
-		for (int j=0; j<R; j++) {
-			W[i][j] = random_init_small();
-		}
-	}
-	
-	*b = random_init_small();
 }
 
 /* Read in the network parameters (N, K and # threads) from command-line input.
@@ -108,38 +95,54 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	float x[N];                   // the first layer
-	float latest_layer[N];        // array for storing the latest layer got calculated
+	// create an array which stores all the layer-values of w, b and y
+	int first_layer_len = N; // input included
+	int total_b_len = K - 1;
+	int total_y_len = K * (first_layer_len + last_layer_len) / 2;
+	int total_W_len = (total_y_len - N) * R;
 	
-	for (int i=0; i < N; i++) {   // initialize x
-		x[i] = random_init_small();
-	}
-	//TEST
-    for (int i=0; i < N; i++) {
-	    printf("%.2f ", x[i]);
+	float *b = (float*) malloc(total_b_len * sizeof(float));
+	float *y = (float*) malloc(total_y_len * sizeof(float));
+	float *W = (float*) malloc(total_W_len * sizeof(float));
+	
+	// initialize the values of y, w and b
+	for (int i=0; i < total_y_len; i++) {
+        y[i] = random_init_small();
+    }
+    for (int i=0; i < K-1; i++) {
+		b[i] = random_init_small();
+    }
+    for (int i=0; i < total_W_len; i++) {
+		W[i] = random_init_small();
+    }
+    
+    /*/TEST
+    for (int i=0; i < total_y_len; i++) {
+        printf("%.2f ",y[i]);
     }
     printf("\n");
-	
-	memcpy(latest_layer, x, N * sizeof(float)); // the lastest layer is the first layer at the beginning
+    for (int i=0; i < K-1; i++) {
+		printf("%.2f ",b[i]);
+    }
+    printf("\n");
+    for (int i=0; i < total_W_len; i++) {
+		printf("%.2f ",W[i]);
+    }
+    printf("\n");
+    */
 
 	// start recording time
 	float t_start = omp_get_wtime();
 
-	// Loop over K layers
-	for(int t=1; t<K; t++) {
-		int layer_len = N - t * (R-1);          // calculate length of this layer
+	for(int k=1; k<K; k++) {
+		int layer_len = N - k * (R-1);          // calculate length of this layer
 		int in_layer_len = layer_len + R - 1;   // the length of the input layer
 
-		// create w, b and y
-		float W[layer_len][R];
-		float b;
-		float y[layer_len]; // layer result
-		
-		init_layer_parameters(W, &b, layer_len);
+        int y_start_idx = k * (N + N - (k-1)*(R-1)) / 2;
+        int x_start_idx = (k-1) * (N + N - (k-2)*(R-1)) / 2;
+        int W_start_idx = (y_start_idx - N) * R;		
 
-		one_layer_calc(latest_layer, W, b, y, in_layer_len); // calculation on this layer, update y
-
-		memcpy(latest_layer, y, layer_len * sizeof(float));  // update the values of latest_layer
+		one_layer_calc(y + x_start_idx, W + W_start_idx, b + (k-1), y + y_start_idx, in_layer_len); // calculation on this layer, update y
 	}
 
 	// stop recording time
@@ -147,13 +150,16 @@ int main(int argc, char *argv[])
 
 	// print the final result
 	printf("Final result is: ");
-	for(int i=0; i<last_layer_len; i++) {
-		printf("%.2f ", latest_layer[i]);
-	}
+	for(int i=(total_y_len - last_layer_len); i<total_y_len; i++) {
+        printf("%.3f ", y[i]);
+    }
 	printf("\n");
 
 	// print the time consumption
-	printf("Elapsed time: %f\n", t_end - t_start);
+	printf("Elapsed time: %fs\n", t_end - t_start);
+	printf("\n");
+	
+	free(b); free(W); free(y);   // free heap memory
 
 	return EXIT_SUCCESS;
 }
