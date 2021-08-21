@@ -56,7 +56,7 @@ float random_init_small()
     return ((rand() % 20000) - 10000) / 10000.0;
 }
 
-/* Read in the network parameters (N, K and # threads) from command-line input.
+/* Read in the network parameters (N, K and n_threads) from command-line input.
  * the library used here is getopt (GNU) from unistd.h. 
  */
 void parse_command_line_parameters(int argc, char *argv[], int *n_threads, int *N, int *K)
