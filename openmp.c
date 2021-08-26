@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
     }
     
     // create an array which stores all the layer-values of w, b and y
-    int first_layer_len = N; 
+    int first_layer_len = N;
     int total_b_len = K - 1;
     int total_y_len = K * (first_layer_len + last_layer_len) / 2;  // input layer included
     int total_W_len = (total_y_len - N) * R;
