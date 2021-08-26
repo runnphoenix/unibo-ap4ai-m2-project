@@ -37,12 +37,12 @@ float Sigmoid(float x)
 }
 
 /* The calculation of y values for one layer */
-void one_layer_calc_v0(float *x, float *W, float *b, float *y, int N)
+void one_layer_calc(float *x, float *W, float *b, float *y, int N)
 {
     #pragma omp parallel num_threads(n_threads)
     {
         int i,j,k;
-        #pragma omp for collapse(2) reduction(+:y[0:N-R+1]) schedule(static)
+        #pragma omp for collapse(2) reduction(+:y[0:N-R+1])
         for (i=0; i<N-R+1; i++) {
             for (j=0; j<R; j++) {
                 y[i] += x[i+j] * W[i*R+j];
@@ -50,23 +50,11 @@ void one_layer_calc_v0(float *x, float *W, float *b, float *y, int N)
         }
         
         //#pragma omp barrier
-        #pragma omp for schedule(static)
+        
+        #pragma omp for
         for (k=0; k<N-R+1; k++) {
             y[k] = Sigmoid(y[k] + *b);  // +b, then sigmoid
         }
-    }
-}
-
-/* The calculation of y values for one layer */
-void one_layer_calc(float *x, float *W, float *b, float *y, int N)
-{
-    int i,j;
-    #pragma omp parallel for private(j) num_threads(n_threads) schedule(static)
-    for (i=0; i<N-R+1; i++) {
-        for (j=0; j<R; j++) {
-            y[i] += x[i+j] * W[i*R+j];
-        }
-        y[i] = Sigmoid(y[i] + *b);  // +b, then sigmoid
     }
 }
 
@@ -117,6 +105,9 @@ int main(int argc, char *argv[])
                 Please give a bigger N or a smaller K.\n");
         return EXIT_FAILURE;
     }
+
+    // start recording time
+    float t_start = hpc_gettime();
     
     // create an array which stores all the layer-values of w, b and y
     int first_layer_len = N; 
@@ -144,9 +135,6 @@ int main(int argc, char *argv[])
         W[i] = random_init_small();
     }
 
-    // start recording time
-    float t_start = hpc_gettime();
-    
     for(int k=1; k<K; k++) {
         int layer_len = N - k * (R-1);          // calculate length of this layer
         int in_layer_len = layer_len + R - 1;   // the length of the input layer

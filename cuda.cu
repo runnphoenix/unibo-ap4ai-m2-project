@@ -117,9 +117,6 @@ int main( int argc, char *argv[] )
                 Please give bigger size of layer 0 or use less layers.\n");
         return EXIT_FAILURE;
     }
-    
-    // Start recording time costage
-    clock_t start = hpc_gettime();
 
     // create an array which stores all the layer-values of w, b and y
     int first_layer_len = N;
@@ -133,7 +130,12 @@ int main( int argc, char *argv[] )
     
     // initialize the values of y, w and b
     for (int i=0; i < total_y_len; i++) {
-        y[i] = random_init_small();
+        if(i < N) {
+            y[i] = random_init_small();
+        }
+        else {
+            y[i] = 0.0;
+        }
     }
     for (int i=0; i < K-1; i++) {
         b[i] = random_init_small();
@@ -156,6 +158,9 @@ int main( int argc, char *argv[] )
     cudaMemcpy(W_d, W, total_W_len * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(y_d, y, total_y_len * sizeof(float), cudaMemcpyHostToDevice);
 
+    // Start recording time costage
+    clock_t start = hpc_gettime();
+    
     // Loop over K layers
     for(int k=1; k<K; k++) {
         // calculate lengthes of this layer and the previous layer
@@ -173,14 +178,14 @@ int main( int argc, char *argv[] )
 
         cudaDeviceSynchronize();
     }
-    
-    // Copy result back from device to host
-    cudaMemcpy(y, y_d, total_y_len * sizeof(float), cudaMemcpyDeviceToHost);
-    
+
     // calculate elapsed time
     clock_t end = hpc_gettime();
     double time_elapsed = end - start;
-    
+        
+    // Copy result back from device to host
+    cudaMemcpy(y, y_d, total_y_len * sizeof(float), cudaMemcpyDeviceToHost);
+     
     // print final result
     printf("Final result is: ");
     for(int i=(total_y_len - last_layer_len); i<total_y_len; i++) {

@@ -18,6 +18,7 @@
  *
  ****************************************************************************/
 
+#include "hpc.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -38,7 +39,6 @@ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
 {
     int i,j;
     for (i=0; i<N-R+1; i++) {
-        y[i] = 0.0;
         for (j=0; j<R; j++) {
             y[i] += x[i+j] * W[i*R+j];
         }
@@ -50,6 +50,25 @@ void one_layer_calc(float *x, float *W, float *b, float *y, int N)
 float random_init_small()
 {
     return ((rand() % 20000) - 10000) / 10000.0;
+}
+
+/* Initialize the values of y, W and b */
+void initialize_parameters(float *y, int y_len, int first_layer_len, float *W, int W_len, float *b, int b_len) 
+{
+    for (int i=0; i < y_len; i++) {
+        if(i < first_layer_len) {
+            y[i] = random_init_small();
+        }
+        else {
+            y[i] = 0.0;
+        }
+    }
+    for (int i=0; i < b_len; i++) {
+        b[i] = random_init_small();
+    }
+    for (int i=0; i < W_len; i++) {
+        W[i] = random_init_small();
+    }
 }
 
 /* Read in the network parameters (N, K and # threads) from command-line input. */
@@ -100,16 +119,11 @@ int main(int argc, char *argv[])
     float *y = (float*) malloc(total_y_len * sizeof(float));
     float *W = (float*) malloc(total_W_len * sizeof(float));
     
-    // initialize the values of y, w and b
-    for (int i=0; i < total_y_len; i++) {
-        y[i] = random_init_small();
-    }
-    for (int i=0; i < total_b_len; i++) {
-        b[i] = random_init_small();
-    }
-    for (int i=0; i < total_W_len; i++) {
-        W[i] = random_init_small();
-    }
+    // initialize parameters
+    initialize_parameters(y, total_y_len, first_layer_len, W, total_W_len, b, total_b_len);
+    
+    // start recording time
+    float t_start = hpc_gettime();
 
     // Loop over K layers
     for(int k=1; k<K; k++) {
@@ -126,12 +140,18 @@ int main(int argc, char *argv[])
                        y + y_start_idx, in_layer_len); 
     }
 
+    // stop recording time
+    float t_end = hpc_gettime();
+    
     // print the final result
     printf("Final result is: ");
     for(int i=(total_y_len - last_layer_len); i<total_y_len; i++) {
         printf("%f ", y[i]);
     }
     printf("\n");
+    
+    // print the time consumption
+    printf("Elapsed time: %e seconds.\n", t_end - t_start);    
     
     // free heap memory
     free(b); free(W); free(y);   
