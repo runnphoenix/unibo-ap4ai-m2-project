@@ -18,6 +18,7 @@
  *
  ****************************************************************************/
 
+#include "hpc.h"
 #include <stdio.h>
 #include <omp.h>
 #include <unistd.h>
@@ -56,9 +57,8 @@ float random_init_small()
     return ((rand() % 20000) - 10000) / 10000.0;
 }
 
-/* Read in the network parameters (N, K and n_threads) from command-line input.
- * the library used here is getopt (GNU) from unistd.h. 
- */
+/* Read in the network parameters (N, K and n_threads) from command-line input
+ * the library used here is getopt (GNU) from unistd.h */
 void parse_command_line_parameters(int argc, char *argv[], int *n_threads, int *N, int *K)
 {
     int c;
@@ -99,6 +99,9 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    // start recording time
+    float t_start = hpc_gettime();
+    
     // create an array which stores all the layer-values of w, b and y
     int first_layer_len = N; 
     int total_b_len = K - 1;
@@ -120,9 +123,6 @@ int main(int argc, char *argv[])
         W[i] = random_init_small();
     }
 
-    // start recording time
-    float t_start = omp_get_wtime();
-
     for(int k=1; k<K; k++) {
         int layer_len = N - k * (R-1);          // calculate length of this layer
         int in_layer_len = layer_len + R - 1;   // the length of the input layer
@@ -138,9 +138,7 @@ int main(int argc, char *argv[])
     }
 
     // stop recording time
-    float t_end = omp_get_wtime();
-    // print the time consumption
-    printf("Elapsed time: %fs\n", t_end - t_start);
+    float t_end = hpc_gettime();
 
     // print the final result
     printf("Final result is: ");
@@ -148,6 +146,9 @@ int main(int argc, char *argv[])
         printf("%f ", y[i]);
     }
     printf("\n");
+    
+    // print the time consumption
+    printf("Elapsed time: %e seconds.\n", t_end - t_start);
     
     // free heap memory
     free(b); free(W); free(y);   

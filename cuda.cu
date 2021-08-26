@@ -15,12 +15,12 @@
  * 
  ****************************************************************************/
 
+#include "hpc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
-#include <time.h>
 
 #define RANDOM_SEED 42
 #define R 3
@@ -116,7 +116,10 @@ int main( int argc, char *argv[] )
         printf("The parameters you input couldn't support k layers. \
                 Please give bigger size of layer 0 or use less layers.\n");
         return EXIT_FAILURE;
-    } 
+    }
+    
+    // Start recording time costage
+    clock_t start = hpc_gettime();
 
     // create an array which stores all the layer-values of w, b and y
     int first_layer_len = N;
@@ -143,9 +146,6 @@ int main( int argc, char *argv[] )
     float *b_d;
     float *W_d;
     float *y_d;
-    
-    // Start recording time costage
-    clock_t start = clock();
     
     // Cuda memory malloc and copy
     cudaMalloc( (void**)&b_d, total_b_len * sizeof(float) );
@@ -178,9 +178,8 @@ int main( int argc, char *argv[] )
     cudaMemcpy(y, y_d, total_y_len * sizeof(float), cudaMemcpyDeviceToHost);
     
     // calculate elapsed time
-    clock_t end = clock();
-    double time_elapsed = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("Elapsed time: %.3fs\n", time_elapsed);
+    clock_t end = hpc_gettime();
+    double time_elapsed = end - start;
     
     // print final result
     printf("Final result is: ");
@@ -188,6 +187,9 @@ int main( int argc, char *argv[] )
         printf("%f ", y[i]);
     }
     printf("\n");
+    
+    // print elapsed time
+    printf("Elapsed time: %e seconds.\n", time_elapsed);
     
     // Free memory
     cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);  // free cuda memory

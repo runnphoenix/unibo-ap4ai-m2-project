@@ -23,7 +23,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <time.h>
 
 #define RANDOM_SEED 42
 #define R 3
@@ -112,9 +111,6 @@ int main(int argc, char *argv[])
         W[i] = random_init_small();
     }
 
-    // Start recording time costage
-    clock_t start = clock();
-
     // Loop over K layers
     for(int k=1; k<K; k++) {
         int layer_len = N - k * (R-1);          // calculate length of this layer
@@ -129,11 +125,6 @@ int main(int argc, char *argv[])
         one_layer_calc(y + x_start_idx, W + W_start_idx, b + (k-1), \
                        y + y_start_idx, in_layer_len); 
     }
-
-    // calculate elapsed time
-    clock_t end = clock();
-    double time_elapsed = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("Elapsed time: %fs\n", time_elapsed);
 
     // print the final result
     printf("Final result is: ");
