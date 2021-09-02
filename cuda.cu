@@ -27,9 +27,8 @@
 const int BLKDIM = (64/R*R)*R;
 
 /*  BLKDIM optimization
- *  number_of_threads shoule be able to divide (32 * R)
- *  (n_node / R * R) is number_of_nodes being able to divide R  ->
- *  (n_node / R * R) * R is number_of_threads being able to divide R
+ *  (n_node / R * R) is number_of_nodes being able to be divided by R  ->
+ *  (n_node / R * R) * R is number_of_threads being able to be divided by R
  */
 
 // Use a __device__ function to calculate Sigmoid

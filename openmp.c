@@ -42,7 +42,7 @@ void one_layer_calc_pre(float *x, float *W, float *b, float *y, int N)
     #pragma omp parallel num_threads(n_threads)
     {
         int i,j,k;
-        #pragma omp for collapse(2) reduction(+:y[0:N-R+1]) schedule(static)
+        #pragma omp for collapse(2) schedule(static) reduction(+:y[0:N-R+1])
         for (i=0; i<N-R+1; i++) {
             for (j=0; j<R; j++) {
                 y[i] += x[i+j] * W[i*R+j];
@@ -50,6 +50,7 @@ void one_layer_calc_pre(float *x, float *W, float *b, float *y, int N)
         }
         
         //#pragma omp barrier
+        
         #pragma omp for schedule(static)
         for (k=0; k<N-R+1; k++) {
             y[k] = Sigmoid(y[k] + *b);  // +b, then sigmoid
@@ -163,7 +164,7 @@ int main(int argc, char *argv[])
         int W_start_idx = (y_start_idx - N) * R;
 
         // calculation on this layer
-        one_layer_calc(y + x_start_idx, W + W_start_idx, b + (k-1), \
+        one_layer_calc_pre(y + x_start_idx, W + W_start_idx, b + (k-1), \
                        y + y_start_idx, in_layer_len); 
     }
 

@@ -33,9 +33,11 @@
 
   The whole project was written and tested on my local machine. The CPU is a
   i7-6700HQ with 4 physical cores. It also uses <em|Intel>'s
-  <em|Hyper-threading> technology which needs to be turned off because the
-  performance of the virtual cores is only 20% of the physical cores on
-  average.
+  <em|Hyper-threading> technology which needs to be turned down because the
+  performance of the virtual cores is only 15-30% of the physical cores on
+  average.<\footnote>
+    https://en.wikipedia.org/wiki/Hyper-threading
+  </footnote>
 
   The GPU is a Nvidia GTX 1060 with 6 GB global memory. The specifications is
   shown in the image below:
@@ -45,74 +47,65 @@
   </big-figure>
 
   The operating system is Ubuntu 20.04.1 LTS. The GCC version is 9.3.0. The
-  CUDA version is 11.3 andNVCC version is 10.1.243.
+  CUDA version is 11.3 and NVCC version is 10.1.243.
 
-  <section|Serial Implementation>
+  <section|Base(Serial) Implementation>
 
   The main purpose of the serial implemention is to check the correctness of
-  the OpenMP and CUDA implementations.
+  the OpenMP and CUDA implementations. It also provides the skeleton for the
+  parallel implementations.
 
-  The serial implementation is very straitforward. In the main function, I
-  loop over all K layers. For each layer, there's a function to perform the
-  culculation in which I loop over all the neurons in the output layer. For
-  each neuron, a loop over the R MACs is implemented.
+  The serial implementation is very straitforward. It's basiclly a 3-layer
+  nested loop. In the main function, all K layers are looped over. For each
+  layer, there's a function to perform the culculation in which there's a
+  loop over all the neurons in the output layer. For each neuron, a loop over
+  the R corresponding neurons in the previous layer is implemented.
 
-  <section|The Memory Management Evolution>
+  The header file <em|hpc.h> provided during the lectures is used in this
+  assignment to provide facility functions such as time recording.
 
-  In the first versions of both the OpenMP and CUDA implementations, I used
-  one array in the stack to store the latest layer result got calculated.
-  Then the <em|N-t(R-1)> elements from the beginning of the array are re-used
-  when calculating the <em|t-th> layer. The benefit of this method is the
-  small memory costage. But it is very different from the real life
-  implementation of Neural Networks. For instance, if we want to extend our
-  project to be able to do the back propagation in future, then we will be
-  lack of information.
+  <subsection|Parameter Parsing>
 
-  So I changed the memory management method by storing all the parameters and
-  results in the heap. In this method we consumed more memory but we also
+  The C library function named <em|getopt><\footnote>
+    https://en.wikipedia.org/wiki/Getopt
+  </footnote> which is included in <em|unistd.h> is used for parameter
+  parsing. It is a part of the POSIX specification, and is universal to
+  Unix-like systems. For the serial and CUDA implementations, the parameters
+  N and K are parsed by <em|-n> and <em|-k> options respectivelly. For the
+  OpenMP implementation, the number of threads is also parsed by a <em|-t>
+  option.
+
+  <subsection|The Memory Management Method>
+
+  In the first versions, one array in the stack is used to store the latest
+  layer got calculated. Then the <em|<em|<em|N-t(R-1)>>> elements from the
+  beginning of this array are re-used when calculating the <em|t-th> layer.
+  The benefit of this method is the small memory costage. But it is very
+  different from the real life implementation of Neural Networks. For
+  instance, if we want to extend our project to be able to do the back
+  propagation in future, then we will be lack of information.
+
+  So the memory management method is changed by storing all the parameters
+  and results in the heap. In this method we consumed more memory but we also
   kept the necessary information.
+
+  Specifically, one array named y is used to store all layers of results,
+  input layer included. Two other arrays named b and W are used to store all
+  the bias and weights respectively. When doing the calculation of the t-th
+  layer, the starting indices of the corresponding data are calculated.
 
   TODO: Illustate the diagram
 
-  \;
-
-  \;
-
-  The second benefit of this method is that we reduces the number of times
-  calling CUDAMemcpy. In the first version, we need to call CudaMemcpy
-  <em|K-1> times because for each layer we need to do that. In the second
-  version, we can do that once for all. As the CudaMemcpy costs lots of time,
-  the total time costage using the second version could be much smaller.
-
-  The performance of this method is not good, cudaMemcpy cost lots of time.
-
-  So the idea is to reduce the times of the mem cpy between host and device.
-
   <section|OpenMP Implementation>
 
-  The OpenMP implementation is very similar to the serial one.
-
-  TODO: only use FOR seems very little knowledge about OpenMP. Schedule?
-  Reduction?
-
-  Introduce how to get the parameters of N and K from terminal
+  The OpenMP implementation is very similar to the serial one. In the layer
+  claculation function, 2 <em|omp for> under <em|omp parallel> are used. The
+  first one is used to do the MAC calculation in which an <em|array
+  reduction> and a <em|collapse(2)> is used. The second one is used to do the
+  <em|Sigmoid> function. For both of them a <em|static schedule> is used
+  because they are pre-determined and predictable work.
 
   TODO: Try different schedule strategies
-
-  Choose the appropriate loop scheduling. OR show a diagram with different
-  strategies
-
-  <\itemize>
-    <item><with|font-series|bold|<kbd|STATIC>><nbsp>causes no synchronization
-    overhead and can maintain data locality when data fits in cache.
-    However,<nbsp><with|font-series|bold|<kbd|STATIC>><nbsp>may lead to load
-    imbalance.
-
-    <item><with|font-series|bold|<kbd|DYNAMIC,GUIDED>><nbsp>incurs a
-    synchronization overhead to keep track of which chunks have been
-    assigned. And, while these schedules could lead to poor data locality,
-    they can improve load balancing. Experiment with different chunk sizes.
-  </itemize>
 
   <section|CUDA Implementation>
 
@@ -121,8 +114,14 @@
   this method is that most threads in each block are wasted if R is a small
   value. TODO: smaller than 32?\ 
 
-  So using one block to calculate more than one neuron is a better idea. In
-  this way we can also use the shared memory in each block.
+  So using one block to calculate more than one neuron is a better idea. The
+  BLKDIM is defined to <em|(n_nodes/R*R)*R> in which <em|(n_nodes/R*R)> is
+  the number of neurons being able to be divided by <em|R>.
+
+  One array named <em|local_y[BLKDIM]> is used in the shared memory to store
+  the values of multiplications of x and W. Then these local values are
+  accumulated and feed to the Sigmoid function. The Sigmoid function is a
+  device function in which <em|expf()> is used instead of <em|exp()>.\ 
 
   <section|Correctness Checking>
 
@@ -130,34 +129,36 @@
   could get the same result as the serial version.
 
   In order to do this, we must make sure that the initial values of the
-  parameters are all the same in these 3 versions. I use a random seed to
-  make sure the random values got are the same.\ 
+  parameters are all the same in these 3 implementations. A random seed is
+  used to make sure the random values are the same. We also have to make sure
+  that all values are initialized in the exactly same order.
 
-  I also manully calculated the result of N=7 and K=3 to make sure that the
-  serial implementation is also correctly calculated.
+  One function named <em|random_init_small()> is used to provide random float
+  values between -1 and 1.
 
   <section|Performance Analysis>
 
-  In order to get the accurate result as much as possible, I switched off all
-  other applications not necessary. For each time costage, I run the code for
-  5 times and used their mean result.
+  In order to get the result as accurate as possible, text mode is activited
+  instead of graphic mode to avoid the interruptions of other applications
+  not necessary. For each time costage, I run the code for 5 times and used
+  their mean result.
 
   What we need here is <strong|Wall Clock Time> instead of <strong|CPU Time>,
   thus the <em|clock()> function defined in <em|time.h> is not suitable. What
-  I used is the <em|hpc_gettime()> function in <em|hpc.h> provided in the
-  course.\ 
+  used in this assignment is the <em|hpc_gettime()> function in <em|hpc.h>
+  provided in the course.\ 
 
-  <subsection|OpenMP>
-
-  <subsubsection|Strong Scaling>
-
-  <subsubsection|Weak Scaling>
-
-  <subsection|CUDA>
+  <subsection|OpenMP Performance>
 
   <subsubsection|Strong Scaling>
 
   <subsubsection|Weak Scaling>
+
+  <subsection|CUDA Performance>
+
+  <subsubsection|Throughput>
+
+  <subsubsection|Speedup vs. CPU>
 
   \;
 
@@ -173,22 +174,27 @@
 <\references>
   <\collection>
     <associate|auto-1|<tuple|1|1>>
-    <associate|auto-10|<tuple|7|3>>
-    <associate|auto-11|<tuple|8|3>>
-    <associate|auto-12|<tuple|8.1|3>>
-    <associate|auto-13|<tuple|8.1.1|3>>
-    <associate|auto-14|<tuple|8.1.2|3>>
-    <associate|auto-15|<tuple|8.2|3>>
-    <associate|auto-16|<tuple|8.2.1|3>>
-    <associate|auto-17|<tuple|8.2.2|3>>
+    <associate|auto-10|<tuple|5|3>>
+    <associate|auto-11|<tuple|6|3>>
+    <associate|auto-12|<tuple|7|4>>
+    <associate|auto-13|<tuple|7.1|4>>
+    <associate|auto-14|<tuple|7.1.1|4>>
+    <associate|auto-15|<tuple|7.1.2|4>>
+    <associate|auto-16|<tuple|7.2|4>>
+    <associate|auto-17|<tuple|7.2.1|4>>
+    <associate|auto-18|<tuple|7.2.2|?>>
     <associate|auto-2|<tuple|1|1>>
     <associate|auto-3|<tuple|2|1>>
     <associate|auto-4|<tuple|2|1>>
     <associate|auto-5|<tuple|3|2>>
     <associate|auto-6|<tuple|3|2>>
-    <associate|auto-7|<tuple|4|2>>
-    <associate|auto-8|<tuple|5|3>>
-    <associate|auto-9|<tuple|6|3>>
+    <associate|auto-7|<tuple|3.1|2>>
+    <associate|auto-8|<tuple|3.2|3>>
+    <associate|auto-9|<tuple|4|3>>
+    <associate|footnote-1|<tuple|1|?>>
+    <associate|footnote-2|<tuple|2|?>>
+    <associate|footnr-1|<tuple|1|?>>
+    <associate|footnr-2|<tuple|2|?>>
   </collection>
 </references>
 
