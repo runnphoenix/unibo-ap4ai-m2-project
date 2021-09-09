@@ -164,7 +164,7 @@ int main( int argc, char *argv[] )
     cudaMemcpy(y_d, y, total_y_len * sizeof(float), cudaMemcpyHostToDevice);
 
     // Start recording time costage
-    clock_t start = hpc_gettime();
+    double start = hpc_gettime();
     
     // Loop over K layers
     for(int k=1; k<K; k++) {
@@ -183,23 +183,27 @@ int main( int argc, char *argv[] )
 
         cudaDeviceSynchronize();
     }
-
+    
     // calculate elapsed time
-    clock_t end = hpc_gettime();
+    double end = hpc_gettime();
     double time_elapsed = end - start;
         
     // Copy result back from device to host
     cudaMemcpy(y, y_d, total_y_len * sizeof(float), cudaMemcpyDeviceToHost);
-     
+   
+    /*
     // print final result
     printf("Final result is: ");
     for(int i=(total_y_len - last_layer_len); i<total_y_len; i++) {
         printf("%f ", y[i]);
     }
     printf("\n");
+    */
     
     // print elapsed time
-    printf("Elapsed time: %e seconds.\n", time_elapsed);
+    printf("Elapsed time: %f seconds.\n", time_elapsed);
+    double throughput = (total_y_len - N) * 4.0 / 1.0e9 / time_elapsed; // float type takes 4 bytes of size
+    printf("Throught is %f GB/s.\n", throughput);
     
     // Free memory
     cudaFree(W_d); cudaFree(y_d); cudaFree(b_d);  // free cuda memory

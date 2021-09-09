@@ -170,14 +170,16 @@ int main(int argc, char *argv[])
 
     // stop recording time
     float t_end = hpc_gettime();
-
+    
+    /*
     // print the final result
     printf("Final result is: ");
     for(int i=(total_y_len - last_layer_len); i<total_y_len; i++) {
         printf("%f ", y[i]);
     }
     printf("\n");
-    
+    */
+
     // print the time consumption
     printf("Elapsed time: %e seconds.\n", t_end - t_start);
     
