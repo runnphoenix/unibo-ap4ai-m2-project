@@ -111,7 +111,7 @@
 
   So using one block to calculate more than one neuron is a better idea. The
   BLKDIM is defined to <em|(n_nodes/R*R)*R> in which <em|(n_nodes/R*R)> is
-  the number of neurons being able to be divided by <em|R>.
+  the number of neurons being able to be divided by <em|R>.\<#540D\>
 
   One array named <em|local_y[BLKDIM]> is used in the shared memory to store
   the values of multiplications of x and W. Then these local values are
